@@ -25,17 +25,17 @@ if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
 fi
 
 TMP=$(mktemp -d)
-nettoyer() { hdiutil detach "$TMP/volume" -quiet >/dev/null 2>&1 || true; rm -rf "$TMP"; }
+nettoyer() { hdiutil detach "${TMP}/volume" -quiet >/dev/null 2>&1 || true; rm -rf "${TMP}"; }
 trap nettoyer EXIT
 
 echo "→ Recherche de la dernière version…"
 curl -fsSL -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/$DEPOT/releases?per_page=30" -o "$TMP/releases.json"
+  "https://api.github.com/repos/${DEPOT}/releases?per_page=30" -o "${TMP}/releases.json"
 
 # Lecture du JSON avec JavaScript for Automation (présent sur tout Mac, sans Python).
 # Même règle que l'app (src/main/updater-mac.js) : plus haute version stable qui
 # contient un .dmg Apple Silicon et son empreinte.
-CHOIX=$(osascript -l JavaScript - "$TMP/releases.json" <<'JXA'
+CHOIX=$(osascript -l JavaScript - "${TMP}/releases.json" <<'JXA'
 function run(argv) {
   const texte = $.NSString.stringWithContentsOfFileEncodingError(argv[0], $.NSUTF8StringEncoding, null).js;
   const lire = (v) => String(v).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
@@ -60,16 +60,16 @@ function run(argv) {
 }
 JXA
 )
-[ -n "$CHOIX" ] || { echo "Aucune version Mac publiée pour le moment." >&2; exit 1; }
-VERSION=$(echo "$CHOIX" | cut -d' ' -f1)
-URL_DMG=$(echo "$CHOIX" | cut -d' ' -f2)
-URL_SOMME=$(echo "$CHOIX" | cut -d' ' -f3)
+[ -n "${CHOIX}" ] || { echo "Aucune version Mac publiée pour le moment." >&2; exit 1; }
+VERSION=$(echo "${CHOIX}" | cut -d' ' -f1)
+URL_DMG=$(echo "${CHOIX}" | cut -d' ' -f2)
+URL_SOMME=$(echo "${CHOIX}" | cut -d' ' -f3)
 
-echo "→ Téléchargement de Growth'Lib $VERSION…"
-curl -fL --progress-bar "$URL_DMG" -o "$TMP/app.dmg"
-ATTENDU=$(curl -fsSL "$URL_SOMME" | awk '{print tolower($1)}')
-OBTENU=$(shasum -a 256 "$TMP/app.dmg" | awk '{print $1}')
-if [ "$ATTENDU" != "$OBTENU" ]; then
+echo "→ Téléchargement de Growth'Lib ${VERSION}…"
+curl -fL --progress-bar "${URL_DMG}" -o "${TMP}/app.dmg"
+ATTENDU=$(curl -fsSL "${URL_SOMME}" | awk '{print tolower($1)}')
+OBTENU=$(shasum -a 256 "${TMP}/app.dmg" | awk '{print $1}')
+if [ "${ATTENDU}" != "${OBTENU}" ]; then
   echo "Empreinte SHA-256 incorrecte : téléchargement rejeté, rien n'a été installé." >&2
   exit 1
 fi
@@ -77,23 +77,23 @@ fi
 # /Applications si on peut y écrire, sinon ~/Applications (compte non administrateur).
 # (GROWTHLIB_INSTALL_DIR : autre dossier, pour tester sans toucher à l'app installée.)
 CIBLE_DOSSIER=${GROWTHLIB_INSTALL_DIR:-/Applications}
-if [ ! -w "$CIBLE_DOSSIER" ]; then CIBLE_DOSSIER="$HOME/Applications"; mkdir -p "$CIBLE_DOSSIER"; fi
-CIBLE="$CIBLE_DOSSIER/$NOM_APP"
+if [ ! -w "${CIBLE_DOSSIER}" ]; then CIBLE_DOSSIER="${HOME}/Applications"; mkdir -p "${CIBLE_DOSSIER}"; fi
+CIBLE="${CIBLE_DOSSIER}/${NOM_APP}"
 
 if [ -z "${GROWTHLIB_INSTALL_DIR:-}" ] && pgrep -x "Growth'Lib" >/dev/null 2>&1; then
   echo "→ Fermeture de Growth'Lib en cours d'exécution…"
   osascript -e "quit app \"Growth'Lib\"" >/dev/null 2>&1 || true
-  i=0; while pgrep -x "Growth'Lib" >/dev/null 2>&1 && [ $i -lt 30 ]; do sleep 1; i=$((i + 1)); done
+  i=0; while pgrep -x "Growth'Lib" >/dev/null 2>&1 && [ ${i} -lt 30 ]; do sleep 1; i=$((i + 1)); done
 fi
 
-echo "→ Installation dans $CIBLE_DOSSIER…"
-hdiutil attach -nobrowse -readonly -mountpoint "$TMP/volume" "$TMP/app.dmg" >/dev/null
-SOURCE=$(find "$TMP/volume" -maxdepth 1 -name '*.app' | head -1)
-[ -n "$SOURCE" ] || { echo "Le .dmg ne contient pas d'application." >&2; exit 1; }
-rm -rf "$CIBLE"
-ditto "$SOURCE" "$CIBLE"
-xattr -dr com.apple.quarantine "$CIBLE" 2>/dev/null || true
+echo "→ Installation dans ${CIBLE_DOSSIER}…"
+hdiutil attach -nobrowse -readonly -mountpoint "${TMP}/volume" "${TMP}/app.dmg" >/dev/null
+SOURCE=$(find "${TMP}/volume" -maxdepth 1 -name '*.app' | head -1)
+[ -n "${SOURCE}" ] || { echo "Le .dmg ne contient pas d'application." >&2; exit 1; }
+rm -rf "${CIBLE}"
+ditto "${SOURCE}" "${CIBLE}"
+xattr -dr com.apple.quarantine "${CIBLE}" 2>/dev/null || true
 
-if [ -n "${GROWTHLIB_INSTALL_DIR:-}" ]; then echo "✓ Growth'Lib $VERSION installé dans $CIBLE (test : non lancé)."; exit 0; fi
-echo "✓ Growth'Lib $VERSION installé. Lancement…"
-open "$CIBLE"
+if [ -n "${GROWTHLIB_INSTALL_DIR:-}" ]; then echo "✓ Growth'Lib ${VERSION} installé dans ${CIBLE} (test : non lancé)."; exit 0; fi
+echo "✓ Growth'Lib ${VERSION} installé. Lancement…"
+open "${CIBLE}"
